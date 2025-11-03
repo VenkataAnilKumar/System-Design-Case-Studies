@@ -33,7 +33,7 @@ Each case study follows a **5-chapter structure**:
 |---|--------|--------------|---------------|
 | **03** | [**Video Streaming**](./case-studies/03-video-streaming-platform) | Adaptive bitrate (HLS), CDN, multi-region, transcoding | 100M hours/day, Netflix-scale |
 | **06** | [**Collaborative Docs**](./case-studies/06-collaborative-document-editor) | Operational Transform/CRDT, WebSocket, conflict resolution | 1M concurrent editors, Google Docs |
-| **08** | [**CDN**](./case-studies/08-content-delivery-network) | Edge caching, origin shielding, cache invalidation, geo-routing | 10TB/day bandwidth, Cloudflare-scale |
+| **07** | [**CDN**](./case-studies/07-content-delivery-network) | Edge caching, origin shielding, cache invalidation, geo-routing | 10TB/day bandwidth, Cloudflare-scale |
 | **12** | [**Live Streaming**](./case-studies/12-live-streaming-platform) | LL-HLS/WebRTC, RTMP ingest, chat moderation, DVR | 1M concurrent viewers, Twitch-scale |
 
 ### 🟢 Social & E-Commerce (4-5, 9, 20)
@@ -41,14 +41,14 @@ Each case study follows a **5-chapter structure**:
 |---|--------|--------------|---------------|
 | **04** | [**Social Media Feed**](./case-studies/04-social-media-news-feed) | Fanout (push/pull hybrid), timeline ranking, newsfeed generation | 500M users, Twitter/Instagram |
 | **05** | [**E-Commerce**](./case-studies/05-ecommerce-marketplace) | Inventory management, shopping cart, checkout, order fulfillment | 10M products, Amazon-scale |
-| **09** | [**Search Engine**](./case-studies/09-search-engine) | Inverted index, PageRank, query processing, autocomplete | 10B documents, Google-scale |
+| **08** | [**Stock Trading**](./case-studies/08-stock-trading-platform) | Order matching engine, order book, market data, low-latency | <10ms p99 latency, NASDAQ-scale |
 | **20** | [**Hotel Reservation**](./case-studies/20-hotel-reservation-system) | Pessimistic locking, overbooking prevention, payment auth/capture | 1M bookings/day, Booking.com |
 
 ### 🟡 Infrastructure & Data (7, 10-11, 17-19, 23, 27-28, 30)
 | # | System | Key Concepts | Scale Targets |
 |---|--------|--------------|---------------|
-| **07** | [**Email Service**](./case-studies/07-email-delivery-service) | SMTP/IMAP, spam filtering, attachment storage, rate limiting | 10B emails/day, Gmail-scale |
-| **10** | [**Stock Trading**](./case-studies/10-stock-trading-platform) | Order matching engine, order book, market data, low-latency | <10ms p99 latency, NASDAQ-scale |
+| **09** | [**Email Service**](./case-studies/09-email-delivery-service) | SMTP/IMAP, spam filtering, attachment storage, rate limiting | 10B emails/day, Gmail-scale |
+| **10** | [**Search Engine**](./case-studies/10-search-engine) | Inverted index, PageRank, query processing, autocomplete | 10B documents, Google-scale |
 | **11** | [**Task Scheduler**](./case-studies/11-distributed-task-scheduler) | Cron-like scheduling, DAG execution, retry logic, priority queues | 1M tasks/day, Airflow/Temporal |
 | **17** | [**IoT Pipeline**](./case-studies/17-iot-data-processing-pipeline) | MQTT ingestion, stream processing (Flink), time-series DB, OTA updates | 10M devices, 1B events/day |
 | **18** | [**Distributed Cache**](./case-studies/18-distributed-cache-system) | Consistent hashing, LRU/LFU eviction, master-replica, pub/sub | 100K RPS, Redis/Memcached |
@@ -79,30 +79,8 @@ Each case study follows a **5-chapter structure**:
 | **25** | [**Payment Gateway**](./case-studies/25-payment-gateway-processor) | PSP routing, fraud detection, PCI DSS (HSM tokenization), settlement | 10K TPS, Stripe/Adyen |
 | **26** | [**Content Moderation**](./case-studies/26-content-moderation-system) | AI classifiers (BERT/ResNet), confidence routing, human review, CSAM detection | 100M items/day, Meta/YouTube |
 | **29** | [**Proximity Service**](./case-studies/29-proximity-service) | Geohash/H3, Redis Geo, radius search, geofencing, real-time location updates | 100M places, 10M updates/sec, Yelp/Uber
-- **#29** [Proximity Service](./case-studies/29-proximity-service) - Yelp/Foursquare
-- **#30** [Real-Time Analytics](./case-studies/30-real-time-analytics-dashboard) - Mixpanel/Amplitude
+---
 
-### 🔴 Advanced
-- **#2** [Ride-Sharing](./case-studies/02-ride-sharing-service) - Uber/Lyft
-- **#3** [Video Streaming](./case-studies/03-video-streaming-platform) - Netflix/YouTube
-- **#6** [Collaborative Editor](./case-studies/06-collaborative-document-editor) - Google Docs
-- **#7** [CDN](./case-studies/07-content-delivery-network) - Cloudflare
-- **#8** [Stock Trading](./case-studies/08-stock-trading-platform) - Robinhood/E*TRADE
-- **#9** [Email Service](./case-studies/09-email-service-provider) - Gmail/Outlook
-- **#12** [Live Streaming](./case-studies/12-live-streaming-platform) - Twitch/YouTube Live
-- **#15** [Ad Serving Platform](./case-studies/15-ad-serving-platform) - Google Ads
-- **#14** [Online Banking](./case-studies/14-online-banking-system) - Chase/Revolut
-- **#16** [Video Conferencing](./case-studies/16-video-conferencing-platform) - Zoom
-- **#15** [Multiplayer Gaming](./case-studies/15-multiplayer-game-backend) - Fortnite
-- **#16** [Video Conferencing](./case-studies/16-video-conferencing-platform) - Zoom
-- **#18** [Distributed Cache](./case-studies/18-distributed-cache-system) - Redis
-- **#19** [Recommendation Engine](./case-studies/19-recommendation-engine) - Netflix
-- **#21** [Message Broker](./case-studies/21-distributed-message-broker) - Kafka
-- **#23** [Observability](./case-studies/23-observability-monitoring-platform) - Prometheus
-- **#23** [Observability](./case-studies/23-observability-monitoring-platform) - Prometheus
-- **#24** [ML Inference](./case-studies/24-ml-model-inference-service) - SageMaker
-- **#27** [Distributed File Storage](./case-studies/27-distributed-file-storage) - Dropbox/Drive
-- **#28** [Web Crawler](./case-studies/28-web-crawler) - Google Bot/Scrapy
 **[📖 View Complete List with Details →](./case-studies/README.md)**
 
 ---
