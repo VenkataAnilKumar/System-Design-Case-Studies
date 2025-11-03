@@ -79,9 +79,6 @@ Each case study follows a **5-chapter structure**:
 | **25** | [**Payment Gateway**](./case-studies/25-payment-gateway-processor) | PSP routing, fraud detection, PCI DSS (HSM tokenization), settlement | 10K TPS, Stripe/Adyen |
 | **26** | [**Content Moderation**](./case-studies/26-content-moderation-system) | AI classifiers (BERT/ResNet), confidence routing, human review, CSAM detection | 100M items/day, Meta/YouTube |
 | **29** | [**Proximity Service**](./case-studies/29-proximity-service) | Geohash/H3, Redis Geo, radius search, geofencing, real-time location updates | 100M places, 10M updates/sec, Yelp/Uber
----
-
-**[📖 View Complete List with Details →](./case-studies/README.md)**
 
 ---
 
