@@ -1,14 +1,18 @@
 # Real-Time Chat Application
 
-A production-grade real-time messaging system design (WhatsApp/Slack-like) supporting instant messaging, group chats, presence indicators, and media sharing.
+## Problem Statement
 
-## Overview
+Design a **WhatsApp/Slack-like messaging system** that enables users to send and receive messages instantly with high reliability and scale.
 
-This case study covers the complete system design for a scalable chat application handling:
-- **100M daily active users** (DAU)
-- **10B messages/day** (~115K messages/sec average, 500K peak)
-- **Real-time delivery** (p99 <100ms for online users)
-- **99.95% availability** (~4.38 hours/year downtime)
+**Core Challenge**: Handle 100M daily active users sending 10B messages/day (115K msgs/sec average, 500K peak) while maintaining real-time delivery (p99 <100ms) and 99.95% availability.
+
+**Key Requirements**:
+- Real-time bidirectional communication (send/receive instantly)
+- Group chats with delivery/read receipts
+- Online presence and typing indicators
+- Media sharing (images, videos, files)
+- Offline message delivery via push notifications
+- Message persistence and history
 
 ## Key Features
 
