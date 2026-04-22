@@ -26,7 +26,7 @@ Each case study follows a **5-chapter structure**:
 | # | System | Key Concepts | Scale Targets |
 |---|--------|--------------|---------------|
 | **01** | [**Real-Time Chat**](./case-studies/01-real-time-chat-application) | WebSocket, message queue, presence, E2EE | 100M users, 1M concurrent |
-| **02** | [**Ride-Sharing**](./case-studies/02-ride-sharing-platform) | Geospatial matching (Geohash), ETA prediction, surge pricing | 10M rides/day, real-time tracking |
+| **02** | [**Ride-Sharing**](./case-studies/02-ride-sharing) | Geospatial matching (Geohash), ETA prediction, surge pricing | 10M rides/day, real-time tracking |
 
 ### 🔵 Media & Content (3, 6, 8, 12)
 | # | System | Key Concepts | Scale Targets |
@@ -47,7 +47,7 @@ Each case study follows a **5-chapter structure**:
 ### 🟡 Infrastructure & Data (7, 10-11, 17-19, 23, 27-28, 30)
 | # | System | Key Concepts | Scale Targets |
 |---|--------|--------------|---------------|
-| **09** | [**Email Service**](./case-studies/09-email-delivery-service) | SMTP/IMAP, spam filtering, attachment storage, rate limiting | 10B emails/day, Gmail-scale |
+| **09** | [**Email Service**](./case-studies/09-email-service-provider) | SMTP/IMAP, spam filtering, attachment storage, rate limiting | 10B emails/day, Gmail-scale |
 | **10** | [**Search Engine**](./case-studies/10-search-engine) | Inverted index, PageRank, query processing, autocomplete | 10B documents, Google-scale |
 | **11** | [**Task Scheduler**](./case-studies/11-distributed-task-scheduler) | Cron-like scheduling, DAG execution, retry logic, priority queues | 1M tasks/day, Airflow/Temporal |
 | **17** | [**IoT Pipeline**](./case-studies/17-iot-data-processing-pipeline) | MQTT ingestion, stream processing (Flink), time-series DB, OTA updates | 10M devices, 1B events/day |
@@ -85,7 +85,7 @@ Each case study follows a **5-chapter structure**:
 ## 🚀 Quick Start
 
 ### For Interviews (No Beginner Cases - All Intermediate to Advanced)
-1. Start with **3 intermediate** systems (Chat, Social Feed, Hotel Reservation, Content Moderation)
+1. Start with **4 intermediate** systems (Chat, Social Feed, Hotel Reservation, Content Moderation)
 2. Master **3 advanced core** systems (Stock Trading, Email Service, Video Streaming)
 3. Deep dive into **2 advanced specialized** (Ride-Sharing, Ad Serving Platform)
 

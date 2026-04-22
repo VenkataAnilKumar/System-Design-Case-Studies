@@ -1,315 +1,300 @@
-# 3) Key Decisions# Chapter 3 · Key Decisions (Concise)
+# Chapter 3 — Key Technical Decisions
 
-
-
-## WebSocket vs HTTP Polling> Goal: Capture the 3–4 decisions that define the architecture. Short, practical, interview-ready.
-
-
-
-**Decision: WebSocket for real-time; HTTP as fallback**---
-
-
-
-Why not HTTP polling?## 1) Real-time transport: WebSocket vs SSE vs Long Polling
-
-- Polling at 1s intervals → 1000 wasted requests/min per user when idle
-
-- 10M users × 1 req/s = 10M RPS just checking for new messages- **Problem**: Need instant, two-way communication (typing, delivery, presence, messages)
-
-- Cost: ~$500K/month vs $50K for persistent connections- **Options**:
-
-  - Long polling: simple, but chatty and inefficient at scale
-
-Why not Long Polling?  - Server-Sent Events (SSE): server→client only, no client→server push
-
-- Still requires 1 request per message  - WebSocket: full-duplex, single persistent connection
-
-- Complex timeout handling (30-60s holds)- **Decision**: WebSocket
-
-- Head-of-line blocking  - Why: lowest latency, best battery/network efficiency, supports bidirectional flows
-
-  - Trade-off: connection state + sticky load balancing required
-
-WebSocket benefits:  - Note: keep REST for non-realtime (history, settings, CRUD)
-
-- Bidirectional: Server can push instantly
-
-- Single TCP connection: Lower overhead---
-
-- Sub-100ms delivery latency
-
-- 10K connections/server achievable with Go/Erlang## 2) Data store for messages: PostgreSQL vs Cassandra
-
-
-
-Trade-off: More complex connection management (heartbeats, reconnects, load balancing)- **Problem**: Messages must appear in strict order within each conversation
-
-- **Options**:
-
-## PostgreSQL vs NoSQL (Cassandra)  - Cassandra: great write throughput, but eventual consistency → ordering gaps
-
-  - PostgreSQL: strong consistency (ACID), simpler queries, easy pagination
-
-**Decision: PostgreSQL with sharding**- **Decision**: PostgreSQL (sharded by conversation_id)
-
-  - Why: ordering and correctness trump raw write TPS
-
-Why consistency matters:  - How we scale: 10 shards × 4 replicas, add shards as we grow
-
-1. Message ordering must be strict per conversation  - Trade-off: sharding complexity, careful capacity planning
-
-2. User deletes message → must disappear immediately (not eventual)  - When to reconsider: if ordering can be relaxed and write volume dominates reads, evaluate Cassandra/ScyllaDB
-
-3. Group admin removes member → no more messages visible (ACID transaction)
+> **TL;DR:** WebSocket for transport · PostgreSQL (sharded by conversation) for ordered messages · Redis Pub/Sub for online routing + Kafka for offline delivery · ULID for sortable message IDs · 30s heartbeat + 60s TTL for presence · Signal Protocol for optional E2EE
 
 ---
 
-PostgreSQL advantages:
+## Contents
 
-- ACID transactions: INSERT message + UPDATE conversation.last_message atomically## 3) Fan-out strategy for group messages: Push vs Pull (Hybrid)
-
-- Strong consistency: What you write, you immediately read
-
-- Foreign keys: Can't orphan messages- **Problem**: Send one message to 10–1000 members without blocking sender
-
-- Complex queries: JOIN conversations + participants + messages natively- **Options**:
-
-  - Push to everyone immediately (fast UX, heavy workload)
-
-Cassandra disadvantages for chat:  - Pull on demand when opening chat (lightweight, delayed UX)
-
-- Eventual consistency → deleted messages may reappear briefly- **Decision**: Hybrid
-
-- No cross-partition transactions → can't atomically update message + conversation  - Default: push to online members via WebSocket
-
-- Lightweight Transactions (LWT) too slow for chat latency requirements  - Offline: enqueue to Kafka → push notification only; sync on return
-
-  - Very large/celebrity groups: pull-dominant (push only @mentions)
-
-Numbers:
-
-- PostgreSQL: ~10K writes/sec per shard---
-
-- With 10 shards: 100K writes/sec → covers 174K peak with headroom
-
-- Read replicas: 3 replicas × 50K reads/sec = 150K reads/sec## 4) Caching strategy: What to cache and how
-
-
-
-We accept manual sharding complexity for correctness.- **Problem**: Reads dominate (10:1). DB is too slow/expensive for every read.
-
-- **Plan**:
-
-## Redis Pub/Sub vs Kafka for Online Delivery  - Presence: Redis keys with short TTL (auto-expire)
-
-  - Recent messages: cache hot conversations (cache-aside on read)
-
-**Decision: Hybrid - Redis Pub/Sub for online, Kafka for offline**  - Profiles/group metadata: cache with longer TTL; invalidate on write
-
-  - Cross-server routing: Redis Pub/Sub channels (user:{id}, group:{id})
-
-Redis Pub/Sub:- **Trade-offs**:
-
-- Sub-millisecond latency for cross-server routing  - Cache invalidation is hard → prefer immutability where possible
-
-- Ephemeral: No persistence needed for online users  - Keep TTLs reasonable; tolerate brief staleness for non-critical data
-
-- Simple: PUBLISH to channel, all subscribers get it instantly
-
-- Limitation: No replay if subscriber is down---
-
-
-
-Kafka:## 5) Asynchrony: What goes to Kafka
-
-- Persistent log: Guaranteed delivery for offline users
-
-- Replay: Can re-consume on failure- **Problem**: Keep p95 under 100 ms for sending a message
-
-- Limitation: ~10-50ms latency (too slow for real-time feel)- **Plan**:
-
-  - Synchronous path: validate → write to DB → ACK to sender
-
-Hybrid approach:  - Async path (Kafka): fan-out to group, notifications, analytics, indexing
-
-1. Message Service writes to DB → publishes to Redis Pub/Sub- **Benefits**:
-
-2. Online users: Get instant delivery via Pub/Sub  - Snappy UX; independent scaling of workers; retry semantics built-in
-
-3. Simultaneously: Write to Kafka `offline_messages` topic
-
-4. Kafka consumers check Redis for online status---
-
-5. If offline: Send push notification via FCM/APNS
-
-## 6) Privacy in notifications
-
-Best of both: Real-time for online + reliable delivery for offline.
-
-- **Problem**: Push notifications can leak content (E2EE later)
-
-## Sharding Strategy (Conversation ID)- **Decision**: Use generic payloads ("New message from Alice")
-
-  - Full content shown only after app fetches and decrypts locally (future E2EE)
-
-**Decision: Shard by conversation_id (consistent hashing)**
+1. [Real-Time Transport — WebSocket vs SSE vs Long Polling](#1-real-time-transport)
+2. [Message Store — PostgreSQL vs Cassandra](#2-message-store)
+3. [Cross-Server Delivery — Redis Pub/Sub + Kafka Hybrid](#3-cross-server-delivery)
+4. [Group Fan-Out — Push vs Pull vs Hybrid](#4-group-fan-out)
+5. [Sharding Key — Conversation ID](#5-sharding-key)
+6. [Message IDs — ULID vs Snowflake vs UUID](#6-message-ids)
+7. [Caching Strategy](#7-caching-strategy)
+8. [Presence — Accuracy vs Cost](#8-presence--accuracy-vs-cost)
+9. [Multi-Region — Active-Active + CRDT](#9-multi-region)
+10. [Message Retention — Tiered Storage](#10-message-retention)
+11. [End-to-End Encryption — Signal Protocol](#11-end-to-end-encryption)
+12. [Rate Limiting — Multi-Layer Strategy](#12-rate-limiting)
 
 ---
 
-Why not user_id?
+## 1. Real-Time Transport
 
-- Group messages span multiple users → requires cross-shard queries## TL;DR
+**Problem:** Need instant, bidirectional communication for messages, typing indicators, delivery receipts, and presence updates — across Web, iOS, and Android.
 
-- Hot users (celebrities) create skewed shards
+**Options:**
 
-- WebSocket for real-time; REST for everything else
+| Option | Latency | Bidirectional | Cost @ 10M users/month |
+|---|---|---|---|
+| HTTP Polling (1s interval) | ~1s | No | ~$500K |
+| Long Polling | ~200ms | No | ~$200K |
+| Server-Sent Events (SSE) | ~50ms | Server → Client only | ~$100K |
+| **WebSocket** | **<50ms** | **Yes** | **~$50K** |
 
-Why conversation_id?- PostgreSQL (sharded) for ordered messages; Redis for hot reads/presence
+**Decision:** WebSocket for all real-time flows; REST for non-real-time (history fetch, settings, CRUD).
 
-- All messages in a conversation live on one shard → no distributed transactions- Kafka for fan-out/notifications/analytics (async)
+**Why:**
+- Single persistent TCP connection per client — bidirectional frames, sub-100ms latency achievable
+- 10K concurrent connections per server using Go or Erlang
+- HTTP polling at 1-second intervals = 10M RPS just for keep-alive at scale — not viable
 
-- Queries are per-conversation (fetch history) → single shard lookup- Hybrid push/pull for groups; generic push notifications for privacy
+**Trade-off:** WebSocket requires sticky load balancing (consistent hashing by `user_id`) and stateful connection management (heartbeats, reconnects, drain on deploy).
 
-- Load distributes evenly (millions of conversations)
+**When to reconsider:** SSE if clients only need server-push with no client events. Long polling at small scale or in environments where WebSocket is blocked by corporate firewalls.
 
 ---
 
-Shard key: `HASH(conversation_id) % num_shards`
+## 2. Message Store
 
-- Start with 10 shards; add more when single shard >8K writes/sec or >1TB storage 
+**Problem:** Messages must be retrieved in strict send order within each conversation. Deletes must be immediate. Group membership changes must be atomic with message visibility.
 
-- Re-sharding: Expand to 20 shards → migrate even-numbered conversations → dual-write period → cutover
+**Options:**
 
-Hot shard mitigation:
-- If one conversation goes viral (10M members): Separate "broadcast" service
-- Rate limit per conversation: Max 100 msg/sec
+| Criterion | PostgreSQL (chosen) | Cassandra |
+|---|---|---|
+| Ordering | Strong (ACID, single shard) | Eventual (race conditions) |
+| Transactions | Full ACID per shard | Limited (LWT is slow) |
+| Write throughput | ~10K/s per shard | ~100K/s+ |
+| Sharding model | Manual re-shard | Auto-distribute |
+| Ops maturity | High | Steeper learning curve |
 
-## ULID vs Snowflake for Message IDs
+**Decision:** PostgreSQL, sharded by `conversation_id` (10 shards initially, 4 replicas each).
 
-**Decision: ULID (Universally Unique Lexicographically Sortable Identifier)**
+**Why:**
+- Ordering is a hard requirement — Cassandra's eventual consistency can produce ordering gaps unacceptable in chat UX
+- A deleted message must disappear immediately, not eventually
+- 10 shards × 10K writes/s = 100K/s capacity; well above 345K/s peak with further sharding
 
-Why not auto-increment?
-- Requires coordination across shards → bottleneck
-- Exposes message count (privacy/competitive intel)
+**Trade-off:** Manual re-sharding when a shard exceeds 8K writes/s or 1 TB storage. More ops work than managed Cassandra.
 
-Why not UUID v4?
-- Random → can't sort by time without additional column
-- Larger index (16 bytes)
+**When to reconsider:** If global write volume routinely exceeds 1M/s and strict per-conversation ordering can be relaxed, evaluate Cassandra or ScyllaDB.
 
-ULID benefits:
-- Time-sortable: First 48 bits = timestamp (ms precision)
-- No coordination: Generated locally
-- Lexicographic ordering: `ORDER BY id DESC` = newest first
-- 128-bit: Collision-free
-- URL-safe: Base32 encoded
+---
 
-Example: `01ARYZ6S41TSV4RRFFQ69G5FAV`
-- First 10 chars: Timestamp
-- Remaining: Randomness
+## 3. Cross-Server Delivery
 
-## Multi-Region Strategy
+**Problem:** User A is connected to WS-Server-1; User B is connected to WS-Server-3. WS-Server-1 must route the message to WS-Server-3 for immediate delivery.
 
-**Decision: Active-Active with CRDT for sync**
+**Options considered:**
+- **Full mesh** (each WS server talks to every other): O(N²) connections; operational nightmare at 1,000 servers
+- **Redis Pub/Sub**: sub-millisecond, ephemeral, no persistence
+- **Kafka direct**: durable but 10–50ms latency — too slow for real-time feel
 
-Single region risks:
-- US-East outage → entire system down
-- High latency for EU/Asia users (300ms+)
+**Decision:** Hybrid — Redis Pub/Sub for online routing, Kafka for offline delivery.
 
-Active-Active approach:
-- Each region has full stack (WS, API, DB, Redis, Kafka)
-- Users routed to nearest region (latency-based DNS)
-- Cross-region sync via Kafka replication (MirrorMaker 2)
+| Concern | Redis Pub/Sub | Kafka |
+|---|---|---|
+| Latency | Sub-millisecond | 10–50ms |
+| Persistence | None (ephemeral) | 7-day log |
+| Replay on failure | No | Yes |
+| Best fit | Online routing | Offline notifications, analytics |
 
-Conflict resolution (CRDT):
-- Messages: Append-only → no conflicts (ULID timestamp for ordering)
-- Presence: Last-write-wins (timestamp-based)
-- Group membership: Operational Transform (add/remove commute)
+**Why:**
+- Redis handles the hot path: publish to `user:{recipient_id}:messages`; all WS servers subscribed for that user deliver instantly
+- Kafka handles the cold path: offline users, notification workers, analytics consumers, search indexing
+- End-to-end: ~50–80ms (DB write + Pub/Sub + delivery)
 
-Trade-off: Eventual consistency across regions (acceptable; users rarely change regions mid-conversation).
+**Trade-off:** Two messaging systems to maintain. Must ensure a message written to Redis Pub/Sub is also durably written to Kafka before the ACK to the sender.
 
-## Message Retention & Archival
+**When to reconsider:** If multi-region active-active is required, Redis Pub/Sub alone won't span regions — Kafka becomes the primary bus with per-region consumers.
 
-**Decision: Tiered storage by age**
+---
 
-Hot (Redis cache): Last 50 messages per conversation, 1h TTL
-- Covers 90% of reads (recent history)
-- ~5TB total (compressed)
+## 4. Group Fan-Out
 
-Warm (PostgreSQL): 30 days, partitioned monthly
-- SSD-backed; indexed for fast queries
-- ~150TB (sharded)
+**Problem:** Send one message to N members (2–1,000+) without blocking the sender or making N synchronous DB writes.
 
-Cold (S3): 30 days - 5 years, compressed Parquet
-- For compliance/legal hold
-- Queries via Athena/Presto (acceptable latency)
+**Options:**
+- **Push all immediately:** Fast UX; N synchronous writes per message; blocks sender for large groups
+- **Pull on open:** Lightweight; members fetch when they open the chat; stale until then
+- **Hybrid:** Push to online members; pull for offline; special case celebrity groups
 
-Deleted messages:
-- Soft delete (deleted_at column) for 7 days (undo grace period)
-- Hard delete after 7 days (GDPR compliance)
-- Media: Mark for deletion in S3 (lifecycle policy purges after 30 days)
+**Decision:** Hybrid.
 
-## End-to-End Encryption (E2EE)
+- **Online members (group ≤ 1,000):** Kafka consumer fans out per member via Redis Pub/Sub
+- **Offline members:** `offline_messages` Kafka topic → Notification Service → FCM/APNs
+- **Celebrity groups (>1,000 online members):** Push only to @mentioned users; others pull on open
 
-**Decision: Optional E2EE (Signal Protocol) for private chats**
+**Why:** The sender is blocked only for a single DB write + Kafka publish (~40ms). All fan-out is async and independently scalable.
 
-Why optional?
-- E2EE prevents server-side moderation/search
-- Enterprise customers need compliance (audit logs, e-discovery)
+**Trade-off:** Offline members may miss notifications if the Kafka consumer is lagging. Hybrid routing rules add complexity (must check presence for each recipient).
 
-Signal Protocol (Double Ratchet):
-- Each device has identity key + signed pre-keys
-- Key exchange via server (relay only; no access to keys)
-- Forward secrecy: New key per message
-- Server stores encrypted payloads; can't read content
+---
 
-Implementation:
-- Client-side encryption before sending to WebSocket
-- Server forwards encrypted blob
-- Recipient decrypts locally
-- Media: Encrypt before S3 upload; share key via encrypted message
+## 5. Sharding Key
 
-Trade-off: Increased client complexity; ~20% battery/CPU overhead.
+**Problem:** Partition messages across DB shards without cross-shard joins or distributed transactions.
 
-## Rate Limiting Strategy
+**Options:**
+- **Shard by `user_id`:** Simple for per-user queries; bad for group messages (one message spans N users → cross-shard writes)
+- **Shard by `conversation_id`:** All messages for a conversation land on one shard; ordering is local
 
-**Decision: Multi-layer rate limits**
+**Decision:** Shard by `conversation_id` using consistent hashing (`HASH(conversation_id) % num_shards`).
 
-Per-user limits:
-- 100 messages/minute (burst protection)
-- 50 group creates/hour (spam prevention)
-- 1000 API calls/minute (DoS protection)
+**Why:**
+- Conversation history pagination is a single-shard query — no scatter-gather
+- Message ordering is enforced locally — no distributed coordination needed
+- A group message requires only one write, not N writes across shards
+- Millions of conversations distribute load evenly
 
-Per-IP limits (at LB):
-- 10K requests/sec (protects backend from DDoS)
+**Trade-off:** A single viral conversation (millions of members, high message volume) can hot-shard. Mitigate with a per-conversation rate limit (100 msg/min) and a dedicated "broadcast shard" for outliers.
 
-Per-conversation limits:
-- 1000 messages/minute (prevents spam in large groups)
+**Re-shard trigger:** Write throughput >8K/s per shard or storage >1 TB. Expand to 2× shards, migrate even-numbered conversation hashes, dual-write during cutover.
 
-Implementation:
-- Redis Token Bucket algorithm
-- Distributed counters with sliding window
-- Return 429 Too Many Requests with Retry-After header
+---
 
-Bypass for VIPs:
-- Separate rate limit tier for paid/enterprise accounts
+## 6. Message IDs
 
-## Presence Accuracy vs Cost
+**Problem:** Message IDs must be globally unique across shards, time-sortable for pagination, and generated locally without coordination between nodes.
 
-**Decision: 60-second TTL with optimistic updates**
+**Options:**
 
-Fully accurate presence:
-- Requires heartbeat every second → 10M users × 1Hz = 10M writes/sec to Redis
-- Cost: ~$100K/month in Redis cluster
+| Option | Sortable | No Coordinator | Size | Notes |
+|---|---|---|---|---|
+| Auto-increment | Yes | No | 64-bit | Bottleneck at shard boundaries |
+| UUID v4 | No | Yes | 128-bit | Random; can't sort by time |
+| Snowflake | Yes | Yes (clock) | 64-bit | Clock skew risk; Twitter-origin |
+| **ULID** | **Yes** | **Yes** | **128-bit** | Base32; lexicographic; no clock risk |
 
-Our approach:
-- Client sends heartbeat every 30s
-- Server sets Redis key: `user:{id}:presence` with 60s TTL
-- If no heartbeat in 60s → key expires → user marked offline
-- Optimistic: Show "online" even during 30-60s window without heartbeat
+**Decision:** ULID (Universally Unique Lexicographically Sortable Identifier).
 
-Edge case: User closes app → appears online for up to 60s
-- Acceptable: "last seen" timestamp shown after 60s
-- Critical scenarios (video call) use explicit presence ping
+**Structure:** `01ARYZ6S41TSV4RRFFQ69G5FAV`
+- First 10 chars: millisecond timestamp (makes IDs time-sortable)
+- Last 16 chars: random component (collision-free within the same millisecond)
 
-Trade-off: 60s staleness for 99% cost reduction.
+**Why:** Time-sortable without a central sequencer; URL-safe Base32 encoding; `ORDER BY message_id DESC` gives newest-first without a separate `created_at` sort column.
 
+**Trade-off:** 128-bit vs Snowflake's 64-bit (larger indexes). Within the same millisecond, ordering is random — at 345K/s peak this affects ~0.3% of messages. If strict sub-millisecond ordering is required, add a per-conversation sequence number as a secondary sort key.
+
+---
+
+## 7. Caching Strategy
+
+**Problem:** Read:write ratio is ~10:1. Without caching, peak DB read load would be 3.45M reads/s — unsustainable for PostgreSQL.
+
+**Decision:** Cache-aside (read-through on miss; write-invalidate on change).
+
+| Cache | Key Pattern | TTL | Purpose |
+|---|---|---|---|
+| Recent messages | `conv:{id}:messages` | 1h | Covers ~90% of reads (recent history) |
+| Presence | `user:{id}:presence` | 60s | Auto-expires on disconnect |
+| WS routing | `user:{id}:conn` | 60s | Routes message to correct WS server |
+| Group metadata | `group:{id}:members` | 5min | Reduces membership DB lookups |
+| User profile | `user:{id}:profile` | 15min | Reduces user lookup joins |
+
+**Trade-offs:**
+- Message content is immutable after send — safe to cache aggressively
+- Mutable data (group membership, presence) — use short TTLs; brief staleness is acceptable
+- Negative caching for recently-missed empty results prevents thundering herd on cold conversations
+
+---
+
+## 8. Presence — Accuracy vs Cost
+
+**Problem:** Tracking 10M online users requires frequent writes. Exact presence (1s heartbeat) = 10M Redis writes/s.
+
+**Options:**
+
+| Approach | Writes/s | Monthly Cost | Staleness |
+|---|---|---|---|
+| 1s heartbeat (exact) | 10M | ~$100K | None |
+| 10s heartbeat | 1M | ~$10K | 10s |
+| **30s heartbeat + 60s TTL** | **333K** | **~$3K** | **Up to 60s** |
+
+**Decision:** 30-second client heartbeat; 60-second Redis TTL.
+
+**Why:** 99% cost reduction. 60-second staleness is acceptable — users see "last seen 1 minute ago" rather than live status. The 30s heartbeat means the key is refreshed twice per TTL window, so a clean disconnect causes the key to expire within 60s.
+
+**Trade-off:** A user who force-quits the app appears online for up to 60 seconds. For time-critical flows (video call initiation), send an explicit `presence.offline` event on app background rather than waiting for TTL expiry.
+
+---
+
+## 9. Multi-Region
+
+**Problem:** Single-region risks: full outage on region failure; 200–300ms latency for EU/Asia users.
+
+**Decision:** Active-Active across 3 regions (US, EU, Asia-Pacific) with CRDT-based conflict resolution.
+
+**Architecture:**
+- Each region has a full independent stack: WS cluster, API cluster, PostgreSQL shards, Redis, Kafka
+- Users are geo-routed to the nearest region via latency-based DNS
+- Cross-region sync via Kafka MirrorMaker 2
+
+**Conflict resolution (CRDT):**
+- Messages: append-only log → no write conflicts; ULID timestamp for ordering
+- Presence: last-write-wins (timestamp-based)
+- Group membership: add/remove operations commute → CRDT set
+
+**Trade-off:** Eventual consistency across regions (acceptable — users rarely change regions mid-conversation). Operational complexity of maintaining 3× the infrastructure.
+
+**When to start multi-region:** Remain single-region until DAU >10M or p99 latency >200ms for a significant user segment.
+
+---
+
+## 10. Message Retention
+
+**Decision:** Tiered storage by message age.
+
+| Tier | Store | Retention | Access Pattern | Notes |
+|---|---|---|---|---|
+| Hot | Redis cache | Last 50 msgs / 1h TTL | In-memory, instant | Covers ~90% of reads |
+| Warm | PostgreSQL (SSD) | 30 days | Indexed queries | Partitioned monthly |
+| Cold | S3 (compressed Parquet) | 30 days – 5 years | Athena/Presto queries | Compliance / legal hold |
+
+**Deletion:**
+- Soft delete: `deleted_at` column; content hidden for 7 days (undo window for accidental deletes)
+- Hard delete: purge row after 7 days (GDPR compliance)
+- Media: S3 lifecycle policy deletes originals after CDN 30-day cache expires
+
+---
+
+## 11. End-to-End Encryption
+
+**Decision:** Optional E2EE using Signal Protocol (Double Ratchet) for 1-on-1 chats; off by default.
+
+**Why optional:**
+- E2EE prevents server-side content moderation and compliance search (both required by enterprise customers)
+- Group E2EE adds significant key management complexity on member join/leave (requires re-keying all members)
+
+**How it works:**
+1. Each device registers an identity key and signed pre-keys with the server
+2. Key exchange is server-relayed; server never holds private keys
+3. Client encrypts the message before sending to WebSocket
+4. Server forwards the encrypted blob; recipient decrypts locally
+5. Media: encrypted before S3 upload; decryption key shared via an encrypted message payload
+
+**Trade-off:** ~20% increase in client CPU/battery. Server-side content moderation is disabled for E2EE conversations.
+
+---
+
+## 12. Rate Limiting
+
+**Decision:** Multi-layer token bucket limits enforced in Redis.
+
+| Layer | Limit | Purpose |
+|---|---|---|
+| Per-user messages | 100 msgs/min | Burst spam protection |
+| Per-conversation | 1,000 msgs/min | Viral group spam |
+| Per-user API calls | 1,000 calls/min | Abuse prevention |
+| Per-IP (at LB) | 10K req/s | DDoS mitigation |
+| Group creation | 50 groups/hour | Account spam |
+
+**Implementation:** Redis sliding-window counters with token bucket refill. Returns `429 Too Many Requests` with `Retry-After` header. Paid/enterprise accounts get a separate higher-tier limit bucket.
+
+---
+
+## Interview TL;DR
+
+| Decision | Chosen | Key Reason | Main Alternative |
+|---|---|---|---|
+| Transport | WebSocket | <100ms, bidirectional | Long polling (simpler, less efficient) |
+| Message store | PostgreSQL (sharded) | ACID ordering | Cassandra (higher write TPS, eventual) |
+| Online routing | Redis Pub/Sub | Sub-ms fan-out | Kafka direct (too slow) |
+| Offline delivery | Kafka | Durable replay | RabbitMQ (simpler, less durable) |
+| Shard key | `conversation_id` | Single-shard queries | `user_id` (cross-shard for groups) |
+| Message IDs | ULID | Sortable, no coordinator | Snowflake (64-bit, clock skew risk) |
+| Presence | 30s heartbeat + 60s TTL | 99% cost savings | 1s heartbeat (exact, costly) |
+| E2EE | Signal Protocol (optional) | Forward secrecy | No E2EE (simpler, no privacy) |

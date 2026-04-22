@@ -42,8 +42,8 @@ Scope (Phase 1): Design only (no code), production-credible, cloud-friendly.
 
 - 100M daily active users (DAU)
 - 10M concurrent WebSocket connections
-- Average 50 messages/day/user → 5B messages/day
-- Average write rate: ~58K messages/sec (×3 at peak ≈ 174K/sec)
+- Average 100 messages/day/user → 10B messages/day
+- Average write rate: ~115K messages/sec (×3 at peak ≈ 345K/sec)
 - Read-heavy: roughly 10 reads per write (history fetch, delivery state)
 
 ---
@@ -51,17 +51,17 @@ Scope (Phase 1): Design only (no code), production-credible, cloud-friendly.
 ## Quick capacity math (back-of-envelope)
 
 - Message size (text avg): ~1 KB (body + metadata)
-- Daily text storage: 5B × 1 KB ≈ 5 TB/day
-- Media (10% messages, 50 KB avg via CDN/S3): ≈ 25 TB/day (served mostly via CDN)
-- One-year storage (text only, before compression): ≈ 1.8 PB
+- Daily text storage: 10B × 1 KB ≈ 10 TB/day
+- Media (10% messages, 50 KB avg via CDN/S3): ≈ 50 TB/day (served mostly via CDN)
+- One-year storage (text only, before compression): ≈ 3.6 PB
 - With compression and realistic retention: plan for multi-PB over years
 
 Networking (messages only):
-- Peak bandwidth: 174K msg/s × 1.1 KB ≈ 190 MB/s ≈ 1.5 Gbps (media served via CDN separately)
+- Peak bandwidth: 345K msg/s × 1.1 KB ≈ 380 MB/s ≈ 3 Gbps (media served via CDN separately)
 
 Compute sizing (rule-of-thumb):
 - WebSocket: ~10K connections/server → ~1,000–1,200 WS servers for 10M conns
-- API: ~5K RPS/server → 40–60 API servers for core traffic
+- API: ~5K RPS/server → 70–80 API servers for core traffic
 - Cache: 0.5–3 TB Redis cluster for presence + hot history
 - DB: Shard PostgreSQL by conversation_id; start with 10 shards × 4 replicas
 
